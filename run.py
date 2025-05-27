@@ -1,25 +1,22 @@
 #TODO Gestion des permissions d'accès
 #from flask_service_tools import APIResponse, RequestValidator, DBManager, AuthManager, Config, AIGatewayClient
+import argparse
+
 from app.db_handler import DbHandler
 from app.github import GitHubService
 from app.changelog_parser import ChangelogParser
 from app.changelog_writer import ChangelogWriter
 
 def main():
-    while True:
-        current_dolibarr_version = input("Veuillez entrer le numéro de version de Dolibarr (ex: 19) : ").strip()
-        if current_dolibarr_version.isdigit():  # Vérifier si l'utilisateur a entré quelque chose
-            break
-        else:
-            print("Entrée invalide. Veuillez entrer uniquement un numéro de version entier (ex: 19, 20).")
+    parser = argparse.ArgumentParser(description='Process Dolibarr changelog')
+    parser.add_argument('--version', '-v', type=int, required=True,
+                        help='Dolibarr version number (ex: 19)')
+    parser.add_argument('--token', '-t', type=str, required=True,
+                        help='GitHub access token')
 
-    # Demander le token GitHub interactivement
-    while True:
-        current_github_token = input("Veuillez entrer votre token d'accès GitHub : ").strip()
-        if not current_github_token:
-            print("Le token GitHub ne peut pas être vide. Veuillez réessayer.")
-        else:
-            break
+    args = parser.parse_args()
+    current_dolibarr_version = str(args.version)
+    current_github_token = args.token
             
 #TODO Vérifier que le token a les bon droits/authentique via un appel à Access Control
     # --- Initialisation des Services et Gestionnaires ---

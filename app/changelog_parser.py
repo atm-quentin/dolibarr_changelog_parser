@@ -355,7 +355,14 @@ class ChangelogParser:
                 if pr_diff_content:
                     print(f"  DIFF ✅ Diff récupéré (longueur: {len(pr_diff_content)} caractères).")
                     db_update_payload, generated_llm_prompt = self._prepare_data_for_llm_and_db(line_content, pr_info, pr_diff_content, line_row['type'])
+                    print("  LLM 🤖 Requête envoyée à l'IA...")
+                    print("-------------------------")
+                    print(generated_llm_prompt)
+                    print("-------------------------")
                     response = self.ai_client.chat_predict('chat-gpt4o-mini', generated_llm_prompt)
+                    print(response)
+                    print(
+                        f"  LLM ✅ Réponse reçue - Modèle: {response['model']}, Tokens prompt: {response['prompt_tokens']}, Tokens complétion: {response['completion_tokens']}, Temps: {response['response_time_ms']}ms")
                     model = response["model"]
                     prompt_tokens = response["prompt_tokens"]
                     completion_tokens = response["completion_tokens"]
