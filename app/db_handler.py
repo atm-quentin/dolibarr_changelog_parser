@@ -1,3 +1,4 @@
+import os
 import sqlite3
 
 class DbHandler:
@@ -12,14 +13,19 @@ class DbHandler:
 
         Args:
             version (str): The version of the changelog (e.g., "18.0").
-            db_name (str, optional): The name of the SQLite database file.
-                                     Defaults to "changelog_parser".
+             (str, optional): The name of the SQLite database file.
+                                     Defaults to "changelog_parser.sqlite3".
         """
-        self.db_name = db_name
+        # Création du dossier data s'il n'existe pas
+        self.data_dir = "data"
+        os.makedirs(self.data_dir, exist_ok=True)
+        
+        # Construction du chemin complet vers le fichier de base de données
+        self.db_path = os.path.join(self.data_dir, db_name)
         self.version = version
-        # Ensure the table name is valid for SQL by replacing dots or other disallowed characters if necessary.
-        # For this example, assuming version format like "18.0" is fine, but be cautious with arbitrary strings.
-        sanitized_version_string = str(version).replace('.', '_') # Example sanitization
+        
+        # Sanitization du nom de la table
+        sanitized_version_string = str(version).replace('.', '_')
         self.table_name = f"changelog_dolibarr_line_v{sanitized_version_string}"
 
     def _get_db_connection(self):
@@ -30,8 +36,9 @@ class DbHandler:
         Returns:
             sqlite3.Connection: The database connection object.
         """
-        conn = sqlite3.connect(self.db_name)
-        conn.row_factory = sqlite3.Row  # To access columns by name
+        # Utilisation du chemin complet pour la connexion
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
         return conn
 
     def create_changelog_table(self):
@@ -60,7 +67,7 @@ class DbHandler:
             # The comma after desc_and_diff_tokens INTEGER was an error in your original schema
             # It has been removed above.
             conn.commit()
-            print(f"Table {self.table_name} checked/created in {self.db_name}")
+            print(f"Table {self.table_name} checked/created in {self.db_path}")
         except sqlite3.Error as e:
             print(f"SQLite error creating table {self.table_name}: {e}")
         finally:
@@ -149,10 +156,11 @@ class DbHandler:
         conn = self._get_db_connection()
         cursor = conn.cursor()
         sql = f"SELECT * FROM {self.table_name} WHERE is_done = FALSE AND not_supported = FALSE"
-
         if random_selection:
             sql += " ORDER BY RANDOM()"
-        if limit is not None: # Check for None explicitly, as limit could be 0
+        else:
+            sql += " ORDER BY type"
+        if limit is not None:  # Check for None explicitly, as limit could be 0
             sql += f" LIMIT {limit}"
 
         try:

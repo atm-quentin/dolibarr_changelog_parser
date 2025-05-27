@@ -17,7 +17,7 @@ def main():
     args = parser.parse_args()
     current_dolibarr_version = str(args.version)
     current_github_token = args.token
-            
+
 #TODO Vérifier que le token a les bon droits/authentique via un appel à Access Control
     # --- Initialisation des Services et Gestionnaires ---
     print("🔧 Initialisation des services...")
@@ -70,11 +70,13 @@ def main():
                 # Phase 2 BD: Enrichissement des lignes stockées en base (infos PRs, diffs).
                 print("\n  [Phase 2 BD] Enrichissement des données via l'API GitHub...")
                 # La méthode `process_changelog_lines_refactored` (ou nom équivalent) :
-                # 1. Lit les lignes non traitées de la BD (`db.get_lines_to_process()`).
-                # 2. Contacte GitHub (via `self.github_service`) pour infos PR et diffs.
-                # 3. Met à jour les lignes en BD avec les informations enrichies.
+                #  Pour chaque ligne du changelog non traitée:
+                # 1. Identifie la PR GitHub associée (par numéro ou recherche)
+                # 2. Récupère les détails de la PR (description, diff)
+                # 3. Génère un résumé explicatif via IA pour utilisateur final ou développeur
+                # 4. Met à jour la ligne dans la base de données avec les informations enrichies
                 concatenated_prompts = parser.process_changelog_lines_refactored(db_handler=db, github_service=github_service)
-                writer.save_text_block(concatenated_prompts, 'prompts.txt')
+                writer.save_text_block(concatenated_prompts, 'data/prompts.txt')
                 print("\n✅ Traitement de la base de données terminé.")
 
             except Exception as e:  # Capture les erreurs durant les opérations sur la base de données.

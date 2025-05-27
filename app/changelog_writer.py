@@ -2,7 +2,8 @@ class ChangelogWriter:
     """
     Écrit des données de changelog dans des fichiers.
     """
-    def save_lines_to_file(self, lines, version_tag, filename_template="changelog_v{}.txt"):
+
+    def save_lines_to_file(self, lines, version_tag, filename_template="data/changelog_v{}.txt"):
         """
         Sauvegarde les lignes fournies dans un fichier texte.
 
@@ -20,6 +21,10 @@ class ChangelogWriter:
 
         filename = filename_template.format(version_tag)
         try:
+            # Create data directory if it doesn't exist
+            import os
+            os.makedirs(os.path.dirname(filename), exist_ok=True)
+
             with open(filename, 'w', encoding='utf-8') as f:
                 for line in lines:
                     f.write(line + '\n')
@@ -29,7 +34,7 @@ class ChangelogWriter:
             print(f"❌ Erreur lors de la sauvegarde du fichier {filename} : {e}")
             return False
 
-    def save_text_block(self, text_content, filename="output.txt"):
+    def save_text_block(self, text_content, filename="data/output.txt"):
         """
         Sauvegarde un bloc de texte unique dans un fichier.
 
@@ -44,6 +49,10 @@ class ChangelogWriter:
             print("ℹ️  Aucun contenu à sauvegarder.")
             return False
         try:
+            # Create data directory if it doesn't exist
+            import os
+            os.makedirs(os.path.dirname(filename), exist_ok=True)
+
             with open(filename, 'w', encoding='utf-8') as f:
                 f.write(text_content)
             print(f"✅ Contenu sauvegardé dans : {filename}")

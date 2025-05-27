@@ -262,7 +262,6 @@ class ChangelogParser:
             'link': pr_link,
             'diff': pr_diff_content,
             'type': changelog_line_type,
-            'is_done': True,
             'not_supported': False,
             'not_supported_reason': None
         }
@@ -281,6 +280,7 @@ class ChangelogParser:
                 "En te basant sur la 'Ligne originale du changelog' et les détails techniques fournis (description PR, diff), "
                 "reformule cette nouveauté ou correction en 1 à 2 phrases simples pour un utilisateur final de Dolibarr. "
                 "Explique clairement ce que cela change ou apporte pour lui dans son utilisation quotidienne, en évitant le jargon technique. "
+                "Indique comment accéder au fonctionnalité, comme si l'utilisateur était vraiment débutant sur l'outil. "
                 "Si l'ensemble de ces informations n'est pas suffisant pour un résumé pertinent, indique 'Information insuffisante pour résumer'."
             )
             audience_target = "un utilisateur final de Dolibarr"
@@ -320,7 +320,24 @@ class ChangelogParser:
     
     def process_changelog_lines_refactored(self, db_handler: 'DbHandler', github_service: 'GitHubService'):
         """
-        Traite les lignes du changelog.
+        Traite les lignes du changelog en enrichissant chaque entrée.
+        
+        Pour chaque ligne du changelog non traitée:
+        1. Identifie la PR GitHub associée (par numéro ou recherche)
+        2. Récupère les détails de la PR (description, diff)  
+        3. Génère un résumé explicatif via IA pour utilisateur final ou développeur
+        4. Met à jour la ligne dans la base de données avec les informations enrichies
+        
+        Args:
+            db_handler (DbHandler): Gestionnaire d'accès à la base de données
+            github_service (GitHubService): Service d'accès à l'API GitHub
+            
+        Returns:
+            str: Texte concaténé des prompts et résumés générés, ou None si aucune ligne à traiter
+            
+        Note:
+            Les lignes sont traitées par lots de 10 maximum pour éviter la surcharge API
+            Les erreurs sont gérées individuellement par ligne pour permettre le traitement des autres
         """
         lines_to_process = db_handler.get_lines_to_process(limit=10) #TODO Changer la limite
         self.github_service = github_service;
@@ -356,25 +373,28 @@ class ChangelogParser:
                     print(f"  DIFF ✅ Diff récupéré (longueur: {len(pr_diff_content)} caractères).")
                     db_update_payload, generated_llm_prompt = self._prepare_data_for_llm_and_db(line_content, pr_info, pr_diff_content, line_row['type'])
                     print("  LLM 🤖 Requête envoyée à l'IA...")
-                    print("-------------------------")
-                    print(generated_llm_prompt)
-                    print("-------------------------")
-                    response = self.ai_client.chat_predict('chat-gpt4o-mini', generated_llm_prompt)
-                    print(response)
+                    # print("-------------------------")
+                    # print(generated_llm_prompt)
+                    # print("-------------------------")
+                    response = self.ai_client.chat_predict('chat-gpt4o-mini', messages=[{"role": "user", "content":generated_llm_prompt}])
+                    # print(response)
                     print(
                         f"  LLM ✅ Réponse reçue - Modèle: {response['model']}, Tokens prompt: {response['prompt_tokens']}, Tokens complétion: {response['completion_tokens']}, Temps: {response['response_time_ms']}ms")
-                    model = response["model"]
                     prompt_tokens = response["prompt_tokens"]
                     completion_tokens = response["completion_tokens"]
-                    response_time_ms = response["response_time_ms"]
                     result = response["response"]
                     if generated_llm_prompt:  # C'est une bonne pratique de vérifier si le prompt n'est pas vide
-                        all_generated_prompts.append(result)
+                        all_generated_prompts.append(f"Ligne originale: {line_content}\n\nRésumé généré: {result}")
+                        db_update_payload.update(
+                            {'is_done': True, 'desc_and_diff_tokens': prompt_tokens + completion_tokens})
                 else:
+                    all_generated_prompts.append(f"Ligne originale: {line_content}\n\nPas de Diff trouvé, pas de résumé généré.")
                     reason = f'Diff non récupérable pour PR #{pr_number_identified}'
                     print(f"  DIFF ❌ {reason}.")
                     db_update_payload = {'not_supported': True, 'not_supported_reason': reason}
             else: # Échec de l'identification de la PR
+                all_generated_prompts.append(
+                    f"Ligne originale: {line_content}\n\nPas de PR trouvée, pas de résumé généré.")
                 reason = pr_identification_result.get('reason', 'Raison inconnue d\'échec d\'identification PR')
                 print(f"  PR IDENTIFICATION ❌ {reason}")
                 db_update_payload = {'not_supported': True, 'not_supported_reason': reason}
@@ -388,8 +408,13 @@ class ChangelogParser:
                 print(f"  ⚠️ Aucune action de mise à jour pour la ligne ID {line_id} (inattendu).")
 
         if all_generated_prompts:
-            prompt_separator = "\n\n========== PROMPT SUIVANT ==========\n\n"
+            prompt_separator = f"\n\n========== {line_row['type']} ==========\n\n"
             concatenated_prompts = prompt_separator.join(all_generated_prompts)
 
         print("\n🏁 Traitement des lignes terminé.")
         return concatenated_prompts
+
+    #TODO Revoir la gestion des erreurs
+    #TODO Refacto https://gemini.google.com/gem/coding-partner/aa5af5f2633f3ea4
+    #TODO Gestion access manager sur branche à part
+    #TODO Readme pour expliquer comment ça fonctionne et comment utiliser
