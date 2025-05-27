@@ -1,0 +1,1 @@
+git+https://github.com/ATM-Consulting/flask_service_tools.git@main
