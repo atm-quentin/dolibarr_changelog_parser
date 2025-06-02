@@ -1,32 +1,58 @@
-#TODO Gestion des permissions d'accès
-#from flask_service_tools import APIResponse, RequestValidator, DBManager, AuthManager, Config, AIGatewayClient
 import argparse
+import traceback  # Importé en haut pour la clarté
 
 from app.db_handler import DbHandler
 from app.github import GitHubService
 from app.changelog_parser import ChangelogParser
 from app.changelog_writer import ChangelogWriter
+from app.changelog_processor import ChangelogProcessor
+from flask_service_tools import Config, AIGatewayClient  # Assurez-vous que Config est bien initialisé/accessible
+from app.logger import global_logger
 
-def main():
+
+# TODO: Gestion des permissions d'accès
+# TODO: Vérifier que le token a les bons droits/authentique via un appel à Access Control
+
+def parse_arguments():
+    """Parse command line arguments."""
     parser = argparse.ArgumentParser(description='Process Dolibarr changelog')
-    parser.add_argument('--version', '-v', type=int, required=True,
-                        help='Dolibarr version number (ex: 19)')
+    parser.add_argument('--version', '-v', type=str, required=True,  # type=str pour correspondre à l'usage
+                        help='Dolibarr version number (ex: 19 ou 19.0)')
     parser.add_argument('--token', '-t', type=str, required=True,
                         help='GitHub access token')
-
     args = parser.parse_args()
-    current_dolibarr_version = str(args.version)
-    current_github_token = args.token
+    return args.version, args.token
 
-#TODO Vérifier que le token a les bon droits/authentique via un appel à Access Control
-    # --- Initialisation des Services et Gestionnaires ---
+
+def initialize_services(github_token: str, dolibarr_version: str):
+    """Initialize and return all necessary services and handlers."""
     print("🔧 Initialisation des services...")
-    github_service = GitHubService(current_github_token)  # Service pour l'API GitHub
-    parser = ChangelogParser()  # Parser pour le texte du ChangeLog
-    writer = ChangelogWriter()  # Utilitaire d'écriture de fichiers (usage optionnel ici)
-    db = DbHandler(current_dolibarr_version)  # Gestionnaire BD (SQLite) pour la version cible
+    github_service = GitHubService(github_token)
+    changelog_parser = ChangelogParser()
+    changelog_writer = ChangelogWriter()
+    db_handler = DbHandler(dolibarr_version)
+    # Assurez-vous que Config.AI_GATEWAY_URL est correctement configuré
+    ai_client = AIGatewayClient(Config.AI_GATEWAY_URL, global_logger)
+    processor = ChangelogProcessor(db_handler, github_service, ai_client, changelog_parser)
 
-    # --- Étape 1: Téléchargement du Fichier ChangeLog ---
+    services = {
+        "github_service": github_service,
+        "parser": changelog_parser,
+        "writer": changelog_writer,
+        "db_handler": db_handler,
+        "processor": processor,
+    }
+    print("  ✅ Services initialisés.")
+    return services
+
+
+def fetch_and_prepare_changelog_section(
+        github_service: GitHubService,
+        parser: ChangelogParser,
+        writer: ChangelogWriter,
+        version: str
+) -> list[str] | None:
+    """Fetch, extract, and save the target changelog section."""
     print(f"\n📥 Étape 1: Téléchargement du ChangeLog Dolibarr...")
     changelog_content = github_service.fetch_raw_file_content(
         owner='Dolibarr',
@@ -35,60 +61,102 @@ def main():
         filepath='ChangeLog'
     )
 
-    if changelog_content:
-        print("  ✅ ChangeLog téléchargé.")
+    if not changelog_content:
+        print("  ❌ Téléchargement du fichier ChangeLog échoué.")
+        return None
+    print("  ✅ ChangeLog téléchargé.")
 
-        # --- Étape 2: Extraction de la Section pour la Version Cible ---
-        print(f"\n🔎 Étape 2: Extraction de la section pour la v{current_dolibarr_version}...")
-        # `section_lines` doit être une liste de chaînes (lignes de la section).
-        section_lines = parser.extract_version_section(changelog_content, current_dolibarr_version)
+    print(f"\n🔎 Étape 2: Extraction de la section pour la v{version}...")
+    section_lines = parser.extract_version_section(changelog_content, version)
 
-        if section_lines:  # Si la section est trouvée et non vide
-            print(f"  ✅ Section v{current_dolibarr_version} extraite ({len(section_lines)} lignes).")
+    if not section_lines:
+        print(f"  ℹ️ Section pour la v{version} non trouvée dans le ChangeLog ou vide.")
+        return None
 
-            writer.save_lines_to_file(section_lines, current_dolibarr_version)
-            print(f"  📄 Section sauvegardée localement.")
+    print(f"  ✅ Section v{version} extraite ({len(section_lines)} lignes).")
+    try:
+        writer.save_lines_to_file(section_lines, version)
+        print(f"  📄 Section sauvegardée localement dans 'data/changelog_v{version}.txt'.")
+    except IOError as e:
+        print(f"  ⚠️ Erreur lors de la sauvegarde locale de la section : {e}")
+        # Décider si c'est une erreur bloquante ou non. Ici, on continue.
 
-            # --- Étape 3: Traitement et Intégration Base de Données ---
-            print(f"\n🗃️ Étape 3: Traitement de la base de données pour la v{current_dolibarr_version}...")
-            try:
-                # Phase 1 BD: Préparation de la table et insertion initiale des lignes brutes.
-                print("  [Phase 1 BD] Préparation table et insertion initiale...")
-                db.create_changelog_table()  # Assure que la table pour la version existe.
+    return section_lines
 
-                # La méthode `determine_line_type_and_process_db` doit analyser `section_lines`,
-                # déterminer le type de chaque ligne, et l'insérer en base via `db.insert_changelog_line`.
-                # Les lignes sont insérées avec `is_done=False`, `not_supported=False`.
-                if hasattr(parser, 'determine_line_type_and_process_db'):
-                    parser.determine_line_type_and_process_db(db, section_lines)
-                else:
-                    # Avertissement si la méthode d'insertion/parsing initiale est manquante.
-                    print(
-                        "  ⚠️ 'determine_line_type_and_process_db' non trouvée sur le parser. L'insertion initiale peut être incomplète.")
-                    print("     Veuillez implémenter cette logique ou une alternative pour peupler la base de données.")
 
-                # Phase 2 BD: Enrichissement des lignes stockées en base (infos PRs, diffs).
-                print("\n  [Phase 2 BD] Enrichissement des données via l'API GitHub...")
-                # La méthode `process_changelog_lines_refactored` (ou nom équivalent) :
-                #  Pour chaque ligne du changelog non traitée:
-                # 1. Identifie la PR GitHub associée (par numéro ou recherche)
-                # 2. Récupère les détails de la PR (description, diff)
-                # 3. Génère un résumé explicatif via IA pour utilisateur final ou développeur
-                # 4. Met à jour la ligne dans la base de données avec les informations enrichies
-                concatenated_prompts = parser.process_changelog_lines_refactored(db_handler=db, github_service=github_service)
-                writer.save_text_block(concatenated_prompts, 'data/prompts.txt')
-                print("\n✅ Traitement de la base de données terminé.")
+def process_changelog_database(
+        processor: ChangelogProcessor,
+        db_handler: DbHandler,
+        section_lines: list[str],
+        writer: ChangelogWriter
+):
+    """Process database: create table, insert initial lines, and enrich data."""
+    print(f"\n🗃️ Étape 3: Traitement de la base de données...")
 
-            except Exception as e:  # Capture les erreurs durant les opérations sur la base de données.
-                print(f"❌ Erreur majeure durant le traitement de la base de données : {e}")
-                import traceback
+    # Phase 1 BD: Préparation de la table et insertion initiale des lignes brutes.
+    print("  [Phase 1 BD] Préparation table et insertion initiale...")
+    db_handler.create_changelog_table()  # Assure que la table pour la version existe.
 
-                traceback.print_exc()  # Affiche la trace complète pour faciliter le débogage.
-        else:
-            print(
-                f"ℹ️ Section pour la v{current_dolibarr_version} non trouvée dans le ChangeLog ou vide. Arrêt du traitement.")
+    # La méthode `determine_line_type_and_process_db` analyse `section_lines`,
+    # détermine le type de chaque ligne, et l'insère en base.
+    if hasattr(processor, 'determine_line_type_and_process_db'):
+        processor.determine_line_type_and_process_db(section_lines)
     else:
-        print("ℹ️ Téléchargement du fichier ChangeLog échoué. Arrêt du traitement.")
+        # Avertissement si la méthode d'insertion/parsing initiale est manquante.
+        print(
+            "  ⚠️ 'determine_line_type_and_process_db' non trouvée sur le processor. L'insertion initiale peut être incomplète.")
+        print("     Veuillez implémenter cette logique ou une alternative pour peupler la base de données.")
+
+    # Phase 2 BD: Enrichissement des lignes stockées en base.
+    print("\n  [Phase 2 BD] Enrichissement des données via l'API GitHub et l'IA...")
+    concatenated_prompts = processor.process_changelog_lines_refactored()  # Limite par défaut à 10 lignes
+
+    if concatenated_prompts:
+        try:
+            writer.save_text_block(concatenated_prompts, 'data/prompts_summary.txt')  # Nom de fichier plus descriptif
+            print("  📄 Prompts et résumés sauvegardés dans 'data/prompts_summary.txt'.")
+        except IOError as e:
+            print(f"  ⚠️ Erreur lors de la sauvegarde des prompts : {e}")
+    else:
+        print("  ℹ️ Aucun prompt n'a été généré ou retourné par le processeur.")
+
+    print("\n✅ Traitement de la base de données terminé.")
+
+
+def main():
+    """Main function to orchestrate changelog processing."""
+    current_dolibarr_version, current_github_token = parse_arguments()
+
+    print(f"🚀 Démarrage du traitement du changelog pour Dolibarr v{current_dolibarr_version}")
+
+    # --- Initialisation des Services ---
+    services = initialize_services(current_github_token, current_dolibarr_version)
+
+    github_service = services["github_service"]
+    parser = services["parser"]
+    writer = services["writer"]
+    db_handler = services["db_handler"]
+    processor = services["processor"]
+
+    # --- Étape 1 & 2: Téléchargement et Extraction de la Section ---
+    section_lines = fetch_and_prepare_changelog_section(
+        github_service, parser, writer, current_dolibarr_version
+    )
+
+    if not section_lines:
+        print("ℹ️ Arrêt du traitement car la section du changelog n'a pas pu être obtenue.")
+        return
+
+    # --- Étape 3: Traitement et Intégration Base de Données ---
+    try:
+        process_changelog_database(processor, db_handler, section_lines, writer)
+    except Exception as e:
+        print(f"❌ Erreur majeure durant le traitement global : {e}")
+        traceback.print_exc()
+        print("ℹ️ Le traitement a été interrompu en raison d'une erreur.")
+    else:
+        print("\n🎉 Traitement du changelog terminé avec succès!")
+
 
 if __name__ == "__main__":
     main()
