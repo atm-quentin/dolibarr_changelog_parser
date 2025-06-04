@@ -23,15 +23,15 @@ class ChangelogProcessor:
 
     USER_SUMMARY_INSTRUCTION = (
         "En te basant sur la 'Ligne originale du changelog' et les détails techniques fournis (description PR, diff), "
-        "reformule cette nouveauté ou correction en 1 à 2 phrases simples pour un utilisateur final de Dolibarr. "
+        "reformule cette nouveauté ou correction en quelques phrases simples et concises pour un utilisateur final de Dolibarr. "
         "Explique clairement ce que cela change ou apporte pour lui dans son utilisation quotidienne, en évitant le jargon technique. "
-        "Indique comment accéder au fonctionnalité, comme si l'utilisateur était vraiment débutant sur l'outil. "
+        "Si la nouveauté introduit une nouvelle fonctionnalité ou modifie une interaction existante, indique de manière simple comment l'utilisateur peut y accéder ou la constater (ex: 'Vous trouverez cette option dans le menu X > Y' ou 'Lors de la création d'une facture, vous remarquerez que...'). Pour les corrections de bugs qui restaurent un fonctionnement attendu, concentre-toi sur le bénéfice de la correction. "
         f"Si l'ensemble de ces informations n'est pas suffisant pour un résumé pertinent, indique '{INSUFFICIENT_INFO_MSG}'."
     )
     DEV_SUMMARY_INSTRUCTION = (
-        "En te basant sur la 'Ligne originale du changelog', la description de la PR et son diff, "
+        "En te basant **principalement sur le diff et la description technique de la PR**, et en t'aidant de la 'Ligne originale du changelog', "
         "génère un résumé technique concis (1 à 2 phrases maximum). Ce résumé doit expliquer "
-        "la nature et l'impact technique principal du changement pour un autre développeur. "
+        "la nature du changement (ex: refactoring, ajout de hook, modification d'API, optimisation de requête) et son impact technique principal (ex: modules/classes clés affectés, conséquences sur les performances, changements de dépendances, dépréciation de fonctionnalités) pour un autre développeur. "
         f"Si l'ensemble de ces informations n'est pas suffisant pour un résumé pertinent, indique '{INSUFFICIENT_INFO_MSG}'."
     )
     LLM_CONTEXT_PROMPT_TEMPLATE = """Contexte : Tu es un assistant IA chargé de rédiger des notes de version claires et concises pour le logiciel Dolibarr, en adaptant le message à l'audience cible.
@@ -135,7 +135,7 @@ class ChangelogProcessor:
             'desc_and_diff_tokens': None
         }
 
-        log_message_prefix = f"Ligne ID {line_id} ('{str(line_content)[:50]}...'):"
+        log_message_prefix = f"{changelog_type} Ligne ID {line_id} ('{line_content}'): \n\n"
 
         if line_content is None:
             print(f"  ⚠️ {log_message_prefix} Contenu vide (None), ignorée.")

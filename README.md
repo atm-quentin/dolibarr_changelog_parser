@@ -17,7 +17,7 @@ Ce module est un script Python conçu pour télécharger, analyser, enrichir et 
 
 * **Docker** et **Docker Swarm** activé.
 * Un **Token d'accès personnel GitHub** avec les droits nécessaires.
-* Un fichier `ai-gateway-stack.yml` pour déployer le service AIGateway.
+* Un fichier `ai-gateway-stack.yml` (https://gitlab.atm-consulting.fr/atm-consulting/ai-services-hub/swarm_stacks)  pour déployer le service AIGateway.
 * Votre **clé API OpenAI** (ou du fournisseur IA utilisé par votre AIGateway).
 * Un fichier `.env` (voir section Configuration).
 
@@ -96,4 +96,4 @@ Vous devriez voir :
 
     changelog_parser.sqlite3
     changelog_v<VERSION>.txt
-    prompts.txt
+    prompts_summary.txt

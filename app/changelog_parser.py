@@ -1,11 +1,11 @@
 import re
 
 
-
 class ChangelogParser:
     """
     Analyse le contenu d'un changelog pour en extraire des sections spécifiques.
     """
+
     def extract_version_section(self, changelog_content, version_prefix_input):
         """
         Extrait une section spécifique du changelog basée sur un préfixe/numéro de version.
@@ -68,6 +68,6 @@ class ChangelogParser:
         match = re.search(r"#(\d+)", text)
         return int(match.group(1)) if match else None
 
-    #TODO Refacto https://gemini.google.com/gem/coding-partner/aa5af5f2633f3ea4
-    #TODO Gestion access manager sur branche à part
-    #TODO Readme pour expliquer comment ça fonctionne et comment utiliser
+    # TODO Refacto https://gemini.google.com/gem/coding-partner/aa5af5f2633f3ea4
+    # TODO Gestion access manager sur branche à part
+    # TODO Readme pour expliquer comment ça fonctionne et comment utiliser

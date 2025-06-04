@@ -1,9 +1,12 @@
 import requests
+
+
 class GitHubService:
     """
     Gère la communication avec l'API GitHub pour récupérer des informations sur les PRs et les fichiers.
     """
     BASE_API_URL = "https://api.github.com"
+
     def __init__(self, github_token):
         """
         Initialise le service GitHub avec un token d'accès.
@@ -17,8 +20,8 @@ class GitHubService:
         self.owner = 'dolibarr'
         self.repo = 'Dolibarr'
         self._headers = {
-            'Authorization': f'token {self._github_token}', # Décommenté et corrigé pour utiliser 'token'
-            'Accept': 'application/vnd.github.v3+json' # Acceptation standard pour JSON
+            'Authorization': f'token {self._github_token}',  # Décommenté et corrigé pour utiliser 'token'
+            'Accept': 'application/vnd.github.v3+json'  # Acceptation standard pour JSON
         }
         self._headers_diff = {
             'Authorization': f'token {self._github_token}',
@@ -143,25 +146,25 @@ class GitHubService:
             if not all([owner, repo, branch, filepath]):
                 print("❌ Tous les paramètres sont requis")
                 return None
-            
+
             url = f"https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{filepath}"
             print(f"ℹ️  Téléchargement du fichier depuis : {url}")
-            
+
             response = requests.get(url, headers={}, timeout=10)
             response.raise_for_status()
-            
+
             # Vérification de la taille de la réponse
             if len(response.content) > 10 * 1024 * 1024:  # 10 MB
                 print("❌ Le fichier est trop volumineux")
                 return None
-            
+
             print("✅ Fichier téléchargé avec succès.")
             return response.text
-            
+
         except requests.exceptions.HTTPError as http_err:
             status_code = getattr(http_err.response, 'status_code', None)
             print(f"❌ Erreur HTTP lors du téléchargement : {http_err}")
-            
+
             if status_code == 401:
                 print("   Assurez-vous que votre token GitHub est correct et a les permissions nécessaires.")
             elif status_code == 403:
@@ -170,8 +173,8 @@ class GitHubService:
                 print(f"   Le fichier {filepath} n'a pas été trouvé sur la branche {branch} du dépôt {owner}/{repo}.")
             elif status_code >= 500:
                 print("   Erreur serveur GitHub. Veuillez réessayer plus tard.")
-            
+
         except requests.exceptions.RequestException as err:
             print(f"❌ Erreur de requête lors du téléchargement : {err}")
-        
+
         return None

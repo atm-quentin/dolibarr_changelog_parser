@@ -1,6 +1,7 @@
 import os
 import sqlite3
 
+
 class DbHandler:
     """
     Manages changelog data stored in an SQLite database.
@@ -19,11 +20,11 @@ class DbHandler:
         # Création du dossier data s'il n'existe pas
         self.data_dir = "data"
         os.makedirs(self.data_dir, exist_ok=True)
-        
+
         # Construction du chemin complet vers le fichier de base de données
         self.db_path = os.path.join(self.data_dir, db_name)
         self.version = version
-        
+
         # Sanitization du nom de la table
         sanitized_version_string = str(version).replace('.', '_')
         self.table_name = f"changelog_dolibarr_line_v{sanitized_version_string}"
@@ -125,10 +126,10 @@ class DbHandler:
 
         if not set_clauses:
             print("No data provided for update.")
-            conn.close() # Ensure connection is closed even if no update
+            conn.close()  # Ensure connection is closed even if no update
             return
 
-        values.append(line_id) # For the WHERE clause
+        values.append(line_id)  # For the WHERE clause
         sql = f"UPDATE {self.table_name} SET {', '.join(set_clauses)} WHERE id = ?"
 
         try:
