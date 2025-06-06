@@ -1,61 +1,53 @@
+# app/db_handler.py
 import os
 import sqlite3
-
+from typing import List, Optional, Dict, Any
+from app.logger import global_logger
 
 class DbHandler:
     """
-    Manages changelog data stored in an SQLite database.
-    Each instance handles operations for a specific changelog version.
+    Gère les données du changelog stockées dans une base de données SQLite.
+    Chaque instance gère les opérations pour une version spécifique du changelog.
     """
 
-    def __init__(self, version: str, db_name: str = "changelog_parser.sqlite3"):
+    def __init__(self, version: str, db_name: str = "changelog_parser.sqlite3") -> None:
         """
-        Initializes the DbHandler for a specific version.
+        Initialise le DbHandler pour une version spécifique.
 
         Args:
-            version (str): The version of the changelog (e.g., "18.0").
-             (str, optional): The name of the SQLite database file.
-                                     Defaults to "changelog_parser.sqlite3".
+            version (str): La version du changelog (ex: "18.0").
+            db_name (str, optional): Le nom du fichier de base de données SQLite.
+                                     Par défaut "changelog_parser.sqlite3".
         """
-        # Création du dossier data s'il n'existe pas
         self.data_dir = "data"
         os.makedirs(self.data_dir, exist_ok=True)
 
-        # Construction du chemin complet vers le fichier de base de données
         self.db_path = os.path.join(self.data_dir, db_name)
         self.version = version
 
-        # Sanitization du nom de la table
         sanitized_version_string = str(version).replace('.', '_')
         self.table_name = f"changelog_dolibarr_line_v{sanitized_version_string}"
 
-    def _get_db_connection(self):
+    def _get_db_connection(self) -> sqlite3.Connection:
         """
-        Establishes and returns a database connection.
-        The connection is configured to return rows that can be accessed by column name.
-
-        Returns:
-            sqlite3.Connection: The database connection object.
+        Établit et retourne une connexion à la base de données.
         """
-        # Utilisation du chemin complet pour la connexion
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         return conn
 
-    def create_changelog_table(self):
+    def create_changelog_table(self) -> None:
         """
-        Creates the changelog table for the instance's version if it doesn't already exist.
-        The table includes columns for ID, type, content, support status, completion status,
-        PR description, link, diff, and token count.
+        Crée la table du changelog pour la version de l'instance si elle n'existe pas.
         """
         conn = self._get_db_connection()
-        cursor = conn.cursor()
         try:
+            cursor = conn.cursor()
             cursor.execute(f"""
             CREATE TABLE IF NOT EXISTS {self.table_name} (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 type TEXT, -- 'dev' ou 'user'
-                line_content TEXT NOT NULL UNIQUE, -- Ensure uniqueness of raw content
+                line_content TEXT NOT NULL UNIQUE,
                 not_supported BOOLEAN DEFAULT FALSE,
                 not_supported_reason TEXT,
                 is_done BOOLEAN DEFAULT FALSE,
@@ -65,112 +57,81 @@ class DbHandler:
                 desc_and_diff_tokens INTEGER
             )
             """)
-            # The comma after desc_and_diff_tokens INTEGER was an error in your original schema
-            # It has been removed above.
             conn.commit()
-            print(f"Table {self.table_name} checked/created in {self.db_path}")
+            global_logger.info(f"Table {self.table_name} vérifiée/créée dans {self.db_path}")
         except sqlite3.Error as e:
-            print(f"SQLite error creating table {self.table_name}: {e}")
+            global_logger.error(f"Erreur SQLite lors de la création de la table {self.table_name}: {e}")
         finally:
             conn.close()
 
-    def insert_changelog_line(self, line_content: str, line_type: str = None):
+    def insert_changelog_line(self, line_content: str, line_type: Optional[str] = None) -> Optional[int]:
         """
-        Inserts a raw changelog line into the database.
-
-        Args:
-            line_content (str): The raw content of the changelog line.
-            line_type (str, optional): The type of the changelog line (e.g., 'dev', 'user').
-                                       Defaults to None.
-
-        Returns:
-            int or None: The ID of the newly inserted row, or None if insertion failed
-                         (e.g., due to a UNIQUE constraint violation or other error).
+        Insère une ligne brute du changelog dans la base de données.
         """
         conn = self._get_db_connection()
-        cursor = conn.cursor()
         try:
+            cursor = conn.cursor()
             cursor.execute(f"""
             INSERT INTO {self.table_name} (line_content, type)
             VALUES (?, ?)
             """, (line_content, line_type))
             conn.commit()
-            # print(f"Inserted line into {self.table_name}: {line_content[:50]}...")
             return cursor.lastrowid
         except sqlite3.IntegrityError:
-            print(f"Line already exists in {self.table_name} (UNIQUE constraint): {line_content[:50]}...")
+            # Cas normal si la ligne existe déjà (contrainte UNIQUE), un log de bas niveau est approprié.
+            global_logger.debug(f"La ligne existe déjà dans {self.table_name}: {line_content[:70]}...")
             return None
         except sqlite3.Error as e:
-            print(f"SQLite error inserting line into {self.table_name}: {e}")
+            global_logger.error(f"Erreur SQLite lors de l'insertion dans {self.table_name}: {e}")
             return None
         finally:
             conn.close()
 
-    def update_changelog_line(self, line_id: int, data: dict):
+    def update_changelog_line(self, line_id: int, data: Dict[str, Any]) -> None:
         """
-        Updates a changelog line with processed data.
-
-        Args:
-            line_id (int): The ID of the changelog line to update.
-            data (dict): A dictionary where keys are column names and values are the new data.
-                         Example: {'pr_desc': 'New description', 'is_done': True}
+        Met à jour une ligne du changelog avec des données traitées.
         """
-        conn = self._get_db_connection()
-        cursor = conn.cursor()
-
-        set_clauses = []
-        values = []
-        for key, value in data.items():
-            set_clauses.append(f"{key} = ?")
-            values.append(value)
-
-        if not set_clauses:
-            print("No data provided for update.")
-            conn.close()  # Ensure connection is closed even if no update
+        if not data:
+            global_logger.warning("Aucune donnée fournie pour la mise à jour de la ligne ID {line_id}.")
             return
 
-        values.append(line_id)  # For the WHERE clause
-        sql = f"UPDATE {self.table_name} SET {', '.join(set_clauses)} WHERE id = ?"
-
+        conn = self._get_db_connection()
         try:
+            cursor = conn.cursor()
+            set_clauses = [f"{key} = ?" for key in data.keys()]
+            values = list(data.values())
+            values.append(line_id)
+
+            sql = f"UPDATE {self.table_name} SET {', '.join(set_clauses)} WHERE id = ?"
             cursor.execute(sql, tuple(values))
             conn.commit()
-            # print(f"Updated line ID {line_id} in {self.table_name}")
         except sqlite3.Error as e:
-            print(f"SQLite error updating line ID {line_id} in {self.table_name}: {e}")
+            global_logger.error(f"Erreur SQLite lors de la mise à jour de la ligne ID {line_id} dans {self.table_name}: {e}")
         finally:
             conn.close()
 
-    def get_lines_to_process(self, limit: int = None, random_selection: bool = False):
+    def get_lines_to_process(self, limit: Optional[int] = None, random_selection: bool = False) -> List[sqlite3.Row]:
         """
-        Fetches lines that are not yet marked as 'is_done' and not marked as 'not_supported'.
-
-        Args:
-            limit (int, optional): The maximum number of lines to fetch. Defaults to None (no limit).
-            random_selection (bool, optional): If True, fetches lines in a random order.
-                                               Defaults to False.
-
-        Returns:
-            list: A list of rows (as sqlite3.Row objects) to be processed.
-                  Returns an empty list if an error occurs or no lines are found.
+        Récupère les lignes qui ne sont pas encore marquées comme 'is_done' et 'not_supported'.
         """
         conn = self._get_db_connection()
-        cursor = conn.cursor()
-        sql = f"SELECT * FROM {self.table_name} WHERE is_done = FALSE AND not_supported = FALSE"
-        if random_selection:
-            sql += " ORDER BY RANDOM()"
-        else:
-            sql += " ORDER BY type"
-        if limit is not None:  # Check for None explicitly, as limit could be 0
-            sql += f" LIMIT {limit}"
-
         try:
+            cursor = conn.cursor()
+            sql = f"SELECT * FROM {self.table_name} WHERE is_done = FALSE AND not_supported = FALSE"
+
+            if random_selection:
+                sql += " ORDER BY RANDOM()"
+            else:
+                sql += " ORDER BY type"
+
+            if limit is not None:
+                sql += f" LIMIT {int(limit)}"
+
             cursor.execute(sql)
-            rows = cursor.fetchall()
-            # print(f"Fetched {len(rows)} lines to process from {self.table_name}")
+            rows: List[sqlite3.Row] = cursor.fetchall()
             return rows
         except sqlite3.Error as e:
-            print(f"SQLite error fetching lines to process from {self.table_name}: {e}")
+            global_logger.error(f"Erreur SQLite lors de la récupération des lignes à traiter de {self.table_name}: {e}")
             return []
         finally:
             conn.close()
