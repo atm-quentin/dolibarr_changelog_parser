@@ -120,9 +120,9 @@ class ChangelogProcessor:
         génération de résumé via LLM, et mise à jour en base.
         Retourne une chaîne résumant l'opération pour l'agrégation des logs.
         """
-        line_id = line_row.get('id')
-        line_content = line_row.get('line_content')
-        changelog_type = line_row.get('type')
+        line_id = line_row['id']
+        line_content = line_row['line_content']
+        changelog_type = line_row['type']
 
         # Payload initial pour la mise à jour de la base de données
         db_update_payload = {
