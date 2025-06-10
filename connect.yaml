@@ -1,0 +1,14 @@
+version: "3.8"
+
+services:
+  flask-app:
+    image: mon-processeur-changelog
+    networks:
+      - dolibarr_changelog_parser_net
+      - aigateway_stack_ai_gateway_net
+
+networks:
+  dolibarr_changelog_parser_net:
+    driver: overlay
+  aigateway_stack_ai_gateway_net:
+    external: true
