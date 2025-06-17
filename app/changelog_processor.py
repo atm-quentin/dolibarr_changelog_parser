@@ -5,6 +5,7 @@ from app.db_handler import DbHandler
 from app.changelog_parser import ChangelogParser
 from app.logger import global_logger
 from flask_service_tools import AIGatewayClient, Config
+from app.changelog_writer import ChangelogWriter
 
 
 class ChangelogProcessor:
@@ -60,6 +61,40 @@ class ChangelogProcessor:
     - Ne mentionne PAS le numéro de la PR.
     - Commence directement par le résumé.
     - Si tu estimes que l'information est insuffisante, réponds UNIQUEMENT par la phrase '{insufficient_info_msg}'.
+    """
+
+    THEMATIC_SUMMARY_PROMPT_TEMPLATE = """
+    Contexte : Tu es un assistant IA expert en rédaction technique, chargé de finaliser les notes de version du logiciel ERP/CRM Dolibarr.
+
+    Tâche : Analyse la liste brute de modifications techniques et de résumés ci-dessous. Ta mission est de réorganiser complètement cette liste en la structurant par thématiques fonctionnelles ou techniques pertinentes pour les utilisateurs et développeurs de Dolibarr.
+
+    Contenu brut à traiter :
+    ---
+    {aggregated_summaries}
+    ---
+
+    Instructions de formatage et de regroupement :
+
+    1.  **Identifier les thèmes** : Regroupe les entrées sous des titres clairs et pertinents. Utilise le format Markdown `## Titre du Thème`. Exemples de thèmes possibles :
+        * Facturation et Paiements
+        * Gestion des Tiers (Clients, Fournisseurs)
+        * Projets et Tâches
+        * Stocks et Produits
+        * API, Webservices et Intégrations
+        * Interface Utilisateur (UI/UX)
+        * Performances et Optimisations
+        * Core & Technique (pour les changements très techniques)
+        * Corrections diverses
+
+    2.  **Lister les changements** : Sous chaque thème, liste les changements pertinents en utilisant des puces Markdown (`*`).
+
+    3.  **Reformuler pour la clarté** : Pour chaque puce, utilise le résumé qui a été généré (celui qui commence après "Résumé généré:"). Ignore la ligne de changelog originale (celle qui commence par "Ligne ID..."). Reformule légèrement si nécessaire pour assurer la cohérence au sein d'un même thème.
+
+    4.  **Être concis** : Chaque point doit être clair, direct et informatif.
+
+    5.  **Ne pas inclure les séparateurs** : N'inclus PAS les `========== CHANGELOG ENTRY ========== ` dans la sortie finale.
+
+    Commence directement la rédaction du document final en Markdown.
     """
 
     def __init__(self, db_handler: DbHandler, github_service: GitHubService, ai_client: AIGatewayClient,
@@ -217,7 +252,7 @@ class ChangelogProcessor:
         return log_entry
 
     def process_changelog_lines_refactored(self,
-                                           process_limit: int = 10):
+                                           process_limit: int = 1000):
         """
         Traite les lignes du changelog en enrichissant chaque entrée.
         Utilise self.db_handler et self.github_service.
@@ -386,3 +421,47 @@ class ChangelogProcessor:
             return pr_details, pr_link if pr_link else f"https://github.com/Dolibarr/dolibarr/pull/{pr_number}"  # Lien par défaut
         global_logger.error(f"  ⚠️ Impossible de récupérer les détails pour la PR #{pr_number}.")
         return None, None
+
+    def summarize_by_theme(self, aggregated_summaries: str, writer: 'ChangelogWriter'):
+        """
+        Prend un bloc de résumés de changelog et demande à l'IA de les regrouper par thème.
+
+        Args:
+            aggregated_summaries (str): La chaîne de caractères contenant tous les résumés individuels.
+            writer (ChangelogWriter): L'instance pour sauvegarder le fichier final.
+        """
+        global_logger.info("\n🧠 Étape 4: Regroupement thématique par l'IA...")
+
+        if not aggregated_summaries or not aggregated_summaries.strip():
+            global_logger.warning(
+                "  ⚠️ Le contenu des résumés est vide. Impossible de lancer le regroupement thématique.")
+            return
+
+        # Préparation du prompt final
+        final_prompt = self.THEMATIC_SUMMARY_PROMPT_TEMPLATE.format(aggregated_summaries=aggregated_summaries)
+
+        global_logger.info("  🤖 Envoi de la requête de synthèse thématique à l'IA...")
+        try:
+            response = self.ai_client.chat_predict(
+                self.LLM_MODEL_NAME,  # Ou un modèle plus puissant si besoin pour cette tâche de synthèse
+                messages=[{"role": "user", "content": final_prompt}]
+            )
+            global_logger.info(
+                f"  ✅ Réponse de synthèse thématique reçue - Modèle: {response.get('model', 'N/A')}, Tokens totaux: {response.get('prompt_tokens', 0) + response.get('completion_tokens', 0)}")
+
+            themed_summary = response.get("response", "")
+
+            if themed_summary:
+                # Sauvegarde du fichier final formaté en Markdown
+                output_filename = 'data/changelog_final_themed.md'
+                writer.save_text_block(themed_summary, output_filename)
+                global_logger.info(f"  📄 Changelog final thématisé et sauvegardé dans '{output_filename}'.")
+            else:
+                global_logger.error("  ❌ L'IA n'a retourné aucun contenu pour la synthèse thématique.")
+
+        except Exception as e:
+            global_logger.error(f"  ❌ Erreur critique lors de la tentative de synthèse thématique par l'IA : {e}")
+
+        global_logger.info("\n✅ Regroupement thématique terminé.")
+
+#TODO Voir pour trier par thématique

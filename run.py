@@ -111,6 +111,11 @@ def process_changelog_database(
         try:
             writer.save_text_block(concatenated_prompts, 'data/prompts_summary.txt')
             global_logger.info("  📄 Prompts et résumés sauvegardés dans 'data/prompts_summary.txt'.")
+            if hasattr(processor, 'summarize_by_theme'):
+                processor.summarize_by_theme(concatenated_prompts, writer)
+            else:
+                global_logger.warning(
+                    "  ⚠️ 'summarize_by_theme' non trouvée sur le processor. Le changelog final ne sera pas généré.")
         except IOError as e:
             global_logger.error(f"  ⚠️ Erreur lors de la sauvegarde des prompts : {e}")
     else:
