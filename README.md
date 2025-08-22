@@ -24,8 +24,10 @@ Ce module est un script Python conçu pour télécharger, analyser, enrichir et 
 ---
 
 ## Mise en Place de l'Environnement
-
+Cloner le dépôt
 Avant de lancer le processeur de changelog, vous devez déployer l'AIGateway et configurer les secrets nécessaires.
+
+docker swarm init --advertise-add
 
 1.  **Créer le Secret Docker** :
     Créez un secret Docker pour stocker votre clé API OpenAI (ou équivalente). Remplacez `VOTRE_CLE_OPENAI` par votre clé réelle.
@@ -49,6 +51,13 @@ Créez un fichier nommé `.env` à la racine du projet du processeur de changelo
 ```env
 # URL de votre AIGateway
 AI_GATEWAY_URL=http://aigateway_service_name:8000
+AI_GATEWAY_URL=http://aigateway_stack_ai_gateway:7000
+LOG_LEVEL=DEBUG
+LOG_TO_FILE=True
+LOG_FILE_PATH=/var/log/app.log
+LOG_MAX_FILE_SIZE=10485760
+LOG_BACKUP_COUNT=5
+SERVICE_NAME=dolibarr_changelog_parser
 # Autres variables si nécessaire... 
 ```
 ---
