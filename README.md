@@ -17,7 +17,7 @@ Ce module est un script Python conçu pour télécharger, analyser, enrichir et 
 
 * Cloner le dépôt en local
 * **Docker** et **Docker Swarm** activé. (Utiliser l'IA (Pro) pour installer ça proprement)
-* Un **Token d'accès personnel GitHub** avec les droits nécessaires.
+* Un **Token d'accès personnel GitHub (fine gained)** avec les droits nécessaires.
 * Un fichier `ai-gateway-stack.yml` (https://gitlab.atm-consulting.fr/atm-consulting/ai-services-hub/swarm_stacks)  pour déployer le service AIGateway.
 * Votre **clé API OpenAI** (ou du fournisseur IA utilisé par votre AIGateway).
 * Un fichier `.env` (voir section Configuration).
