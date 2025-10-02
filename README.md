@@ -15,7 +15,8 @@ Ce module est un script Python conçu pour télécharger, analyser, enrichir et 
 
 ## Prérequis
 
-* **Docker** et **Docker Swarm** activé.
+* Cloner le dépôt en local
+* **Docker** et **Docker Swarm** activé. (Utiliser l'IA (Pro) pour installer ça proprement)
 * Un **Token d'accès personnel GitHub** avec les droits nécessaires.
 * Un fichier `ai-gateway-stack.yml` (https://gitlab.atm-consulting.fr/atm-consulting/ai-services-hub/swarm_stacks)  pour déployer le service AIGateway.
 * Votre **clé API OpenAI** (ou du fournisseur IA utilisé par votre AIGateway).
@@ -27,7 +28,7 @@ Ce module est un script Python conçu pour télécharger, analyser, enrichir et 
 Cloner le dépôt
 Avant de lancer le processeur de changelog, vous devez déployer l'AIGateway et configurer les secrets nécessaires.
 
-docker swarm init --advertise-add
+docker swarm init --advertise-addr {one ip}
 
 1.  **Créer le Secret Docker** :
     Créez un secret Docker pour stocker votre clé API OpenAI (ou équivalente). Remplacez `VOTRE_CLE_OPENAI` par votre clé réelle.
@@ -50,7 +51,6 @@ Créez un fichier nommé `.env` à la racine du projet du processeur de changelo
 
 ```env
 # URL de votre AIGateway
-AI_GATEWAY_URL=http://aigateway_service_name:8000
 AI_GATEWAY_URL=http://aigateway_stack_ai_gateway:7000
 LOG_LEVEL=DEBUG
 LOG_TO_FILE=True
@@ -63,7 +63,7 @@ SERVICE_NAME=dolibarr_changelog_parser
 ---
 ## Build de l'Image Docker
 
-Construisez l'image Docker pour le processeur de changelog :
+Construisez l'image Docker pour le processeur de changelog (se placer à la racine):
 ```bash
 docker build -t mon-processeur-changelog .
 ```
